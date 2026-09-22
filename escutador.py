@@ -2,12 +2,13 @@ import logging
 import json
 import requests
 import re
+import os
+from threading import Thread
+from flask import Flask
 from datetime import datetime
 from telethon import TelegramClient, events
 
-# ==========================================
-# 1. CONFIGURAÇÃO DO RASTREIO (LOGS)
-# ==========================================
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -17,9 +18,16 @@ logging.basicConfig(
     ]
 )
 
-# ==========================================
-# 2. CREDENCIAIS
-# ==========================================
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return "Bot Telegram Base44 ativo e a operar em plano gratuito!", 200
+
+def run_flask():
+    porta = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=porta)
+
 api_id = '36667927'
 api_hash = '7514985528ad7a0458d289549d0dc678'
 TOKEN_BASE44 = 'b44u_527ea4fab8b748efe22e59eb3596437bde1021dd515e3f5183d51d131c09fdb4'
@@ -27,9 +35,6 @@ URL_BASE44 = 'https://ambrosial-ops-flow-dash.base44.app/api/entities/Operacoes'
 
 client = TelegramClient('sessao_telegram', api_id, api_hash)
 
-# ==========================================
-# 3. FUNÇÃO DE ENVIO COM RASTREIO
-# ==========================================
 def enviar_para_base44(casa_aposta, padrao, liga, resultado):
     payload = {
         "casa_de_aposta": casa_aposta,
@@ -46,42 +51,31 @@ def enviar_para_base44(casa_aposta, padrao, liga, resultado):
 
     try:
         resposta = requests.post(URL_BASE44, json=payload, headers=headers, timeout=10)
-        
         if resposta.status_code in [200, 201]:
             logging.info("✅ [SUCESSO] Operação comercial entregue à Base44!")
         else:
             logging.error(f"❌ [ERRO API] Código {resposta.status_code}. Retorno: {resposta.text}")
-            
     except Exception as e:
         logging.critical(f"💥 [FALHA CRÍTICA] Erro de rede ou servidor: {e}")
-
-# ==========================================
-# 4. ESCUTADOR DO TELEGRAM E EXTRAÇÃO (REGEX)
-# ==========================================
-@client.on(events.NewMessage)
+        @client.on(events.NewMessage)
 async def my_event_handler(event):
     mensagem = event.message.message
     
-    # Verifica se é um sinal de Green ou Red
     resultado = None
     if "GREEN" in mensagem.upper() or "✅" in mensagem:
         resultado = 1
     elif "RED" in mensagem.upper() or "❌" in mensagem:
         resultado = -1
         
-    # Se encontrou um resultado, extrai os dados e envia
     if resultado is not None:
         logging.info(f"📩 Sinal detectado no Telegram. Resultado: {'Green' if resultado == 1 else 'Red'}")
         
-        # 1. Extrair o Padrão
         padrao_match = re.search(r'Padrão:\s*(.+)', mensagem)
         padrao_detectado = padrao_match.group(1).strip() if padrao_match else "Padrão Não Identificado"
         
-        # 2. Extrair a Liga (Ignora o emoji do troféu automaticamente)
         liga_match = re.search(r'Liga:\s*(.+)', mensagem)
         liga_detectada = liga_match.group(1).strip() if liga_match else "Liga Não Identificada"
         
-        # 3. Extrair a Casa de Aposta baseada no Link da mensagem
         casa_aposta = "Desconhecida"
         if "betano.bet.br" in mensagem.lower() or "vigia betano" in mensagem.lower():
             casa_aposta = "Betano"
@@ -90,9 +84,15 @@ async def my_event_handler(event):
 
         logging.info(f"🔍 Dados Extraídos -> Padrão: {padrao_detectado} | Liga: {liga_detectada} | Casa: {casa_aposta}")
         
-        # Envia os dados reais e limpos para a Base44
         enviar_para_base44(casa_aposta, padrao_detectado, liga_detectada, resultado)
 
-with client:
-    logging.info("🚀 Escutador comercial ativado. A monitorar Telegram sem limites...")
-    client.run_until_disconnected()
+if __name__ == '__main__':
+    t = Thread(target=run_flask)
+    t.daemon = True
+    t.start()
+
+    logging.info("🚀 Servidor Web e Escutador Comercial ativados em paralelo...")
+    with client:
+        client.run_until_disconnected()
+
+
