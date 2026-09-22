@@ -8,7 +8,9 @@ from flask import Flask
 from datetime import datetime
 from telethon import TelegramClient, events
 
-
+# ==========================================
+# 1. CONFIGURAÇÃO DO RASTREIO (LOGS)
+# ==========================================
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -18,6 +20,9 @@ logging.basicConfig(
     ]
 )
 
+# ==========================================
+# 2. MINI SERVIDOR WEB (OBRIGATÓRIO PARA O RENDER GRÁTIS)
+# ==========================================
 app = Flask(__name__)
 
 @app.route('/')
@@ -28,6 +33,9 @@ def run_flask():
     porta = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=porta)
 
+# ==========================================
+# 3. CREDENCIAIS
+# ==========================================
 api_id = '36667927'
 api_hash = '7514985528ad7a0458d289549d0dc678'
 TOKEN_BASE44 = 'b44u_527ea4fab8b748efe22e59eb3596437bde1021dd515e3f5183d51d131c09fdb4'
@@ -35,6 +43,9 @@ URL_BASE44 = 'https://ambrosial-ops-flow-dash.base44.app/api/entities/Operacoes'
 
 client = TelegramClient('sessao_telegram', api_id, api_hash)
 
+# ==========================================
+# 4. FUNÇÃO DE ENVIO COM RASTREIO
+# ==========================================
 def enviar_para_base44(casa_aposta, padrao, liga, resultado):
     payload = {
         "casa_de_aposta": casa_aposta,
@@ -51,13 +62,19 @@ def enviar_para_base44(casa_aposta, padrao, liga, resultado):
 
     try:
         resposta = requests.post(URL_BASE44, json=payload, headers=headers, timeout=10)
+        
         if resposta.status_code in [200, 201]:
             logging.info("✅ [SUCESSO] Operação comercial entregue à Base44!")
         else:
             logging.error(f"❌ [ERRO API] Código {resposta.status_code}. Retorno: {resposta.text}")
+            
     except Exception as e:
         logging.critical(f"💥 [FALHA CRÍTICA] Erro de rede ou servidor: {e}")
-        @client.on(events.NewMessage)
+
+# ==========================================
+# 5. ESCUTADOR DO TELEGRAM E EXTRAÇÃO (REGEX)
+# ==========================================
+@client.on(events.NewMessage)
 async def my_event_handler(event):
     mensagem = event.message.message
     
@@ -79,13 +96,16 @@ async def my_event_handler(event):
         casa_aposta = "Desconhecida"
         if "betano.bet.br" in mensagem.lower() or "vigia betano" in mensagem.lower():
             casa_aposta = "Betano"
-        elif "bet365.com" in mensagem.lower() or "bet365.bet" in mensagem.lower():
+        elif "bet365.com" in newMessage.lower() or "bet365.bet" in mensagem.lower():
             casa_aposta = "Bet365"
 
         logging.info(f"🔍 Dados Extraídos -> Padrão: {padrao_detectado} | Liga: {liga_detectada} | Casa: {casa_aposta}")
         
         enviar_para_base44(casa_aposta, padrao_detectado, liga_detectada, resultado)
 
+# ==========================================
+# 6. INICIALIZAÇÃO SIMULTÂNEA (WEB + TELEGRAM)
+# ==========================================
 if __name__ == '__main__':
     t = Thread(target=run_flask)
     t.daemon = True
@@ -94,5 +114,3 @@ if __name__ == '__main__':
     logging.info("🚀 Servidor Web e Escutador Comercial ativados em paralelo...")
     with client:
         client.run_until_disconnected()
-
-
