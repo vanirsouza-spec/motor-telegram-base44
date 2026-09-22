@@ -96,12 +96,13 @@ async def my_event_handler(event):
         casa_aposta = "Desconhecida"
         if "betano.bet.br" in mensagem.lower() or "vigia betano" in mensagem.lower():
             casa_aposta = "Betano"
-        elif "bet365.com" in newMessage.lower() or "bet365.bet" in mensagem.lower():
+        elif "bet365.com" in mensagem.lower() or "bet365.bet" in mensagem.lower():
             casa_aposta = "Bet365"
 
         logging.info(f"🔍 Dados Extraídos -> Padrão: {padrao_detectado} | Liga: {liga_detectada} | Casa: {casa_aposta}")
         
         enviar_para_base44(casa_aposta, padrao_detectado, liga_detectada, resultado)
+
 
 # ==========================================
 # 6. INICIALIZAÇÃO SIMULTÂNEA (WEB + TELEGRAM)
