@@ -87,21 +87,25 @@ async def my_event_handler(event):
     if resultado is not None:
         logging.info(f"📩 Sinal detectado no Telegram. Resultado: {'Green' if resultado == 1 else 'Red'}")
         
-        padrao_match = re.search(r'Padrão:\s*(.+)', mensagem)
+        # Procura por "Padrão" ou "Padrao" ignorando maiúsculas/minúsculas e acentos
+        padrao_match = re.search(r'padr[ãa]o[:\*\s]*(.+)', mensagem, re.IGNORECASE)
         padrao_detectado = padrao_match.group(1).strip() if padrao_match else "Padrão Não Identificado"
         
-        liga_match = re.search(r'Liga:\s*(.+)', mensagem)
+        # Procura por "Liga" ignorando maiúsculas/minúsculas
+        liga_match = re.search(r'liga[:\*\s]*(.+)', mensagem, re.IGNORECASE)
         liga_detectada = liga_match.group(1).strip() if liga_match else "Liga Não Identificada"
         
         casa_aposta = "Desconhecida"
-        if "betano.bet.br" in mensagem.lower() or "vigia betano" in mensagem.lower():
+        msg_lower = mensagem.lower()
+        if any(termo in msg_lower for termo in ["betano", "betano.bet.br", "vigia betano"]):
             casa_aposta = "Betano"
-        elif "bet365.com" in mensagem.lower() or "bet365.bet" in mensagem.lower():
+        elif any(termo in msg_lower for termo in ["bet365", "bet365.com", "bet365.bet"]):
             casa_aposta = "Bet365"
 
         logging.info(f"🔍 Dados Extraídos -> Padrão: {padrao_detectado} | Liga: {liga_detectada} | Casa: {casa_aposta}")
         
         enviar_para_base44(casa_aposta, padrao_detectado, liga_detectada, resultado)
+
 
 
 # ==========================================
