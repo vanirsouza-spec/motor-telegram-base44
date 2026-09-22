@@ -10,25 +10,29 @@ async def my_event_handler(event):
         resultado = -1
         
     if resultado is not None:
-        # Mostra exatamente o texto que chegou do Telegram nos logs para diagnóstico
-        logging.info(f"📩 Sinal detectado! Texto original:\n{mensagem}")
+        logging.info(f"📩 Sinal detectado! Texto:\n{mensagem}")
         
-        # Procura pelo Padrão considerando quebra de linha ou asteriscos
-        padrao_match = re.search(r'(?:padrão|padrao)[:\*\s]*([^\n]+)', mensagem, re.IGNORECASE)
-        padrao_detectado = padrao_match.group(1).replace('*', '').strip() if padrao_match else "Padrão Não Identificado"
+        # Procura por Padrão, Entrada ou qualquer linha descritiva
+        padrao_match = re.search(r'(?:padr[ãa]o|padrao|entrada|estrat[ée]gia)[:\*\s]*([^\n]+)', mensagem, re.IGNORECASE)
+        if padrao_match:
+            padrao_detectado = padrao_match.group(1).replace('*', '').strip()
+        else:
+            # Se não achar a palavra exata, pega a primeira linha útil da mensagem
+            linhas = [l.strip() for l in mensagem.split('\n') if l.strip()]
+            padrao_detectado = linhas[0] if linhas else "Padrão Automático"
         
-        # Procura pela Liga considerando quebra de linha ou asteriscos
+        # Captura flexível para a Liga
         liga_match = re.search(r'(?:liga)[:\*\s]*([^\n]+)', mensagem, re.IGNORECASE)
-        liga_detectada = liga_match.group(1).replace('*', '').strip() if liga_match else "Liga Não Identificada"
+        liga_detectada = liga_match.group(1).replace('*', '').strip() if liga_match else "Liga Geral"
         
-        casa_aposta = "Desconhecida"
+        # Identificação da Casa de Aposta
+        casa_aposta = "Betano" # Valor padrão caso o canal seja focado numa casa específica, ou detetado pelo texto:
         msg_lower = mensagem.lower()
-        if any(termo in msg_lower for termo in ["betano", "betano.bet.br", "vigia betano"]):
-            casa_aposta = "Betano"
-        elif any(termo in msg_lower for termo in ["bet365", "bet365.com", "bet365.bet"]):
+        if "bet365" in msg_lower:
             casa_aposta = "Bet365"
+        elif "betano" in msg_lower:
+            casa_aposta = "Betano"
 
         logging.info(f"🔍 Dados Extraídos -> Padrão: {padrao_detectado} | Liga: {liga_detectada} | Casa: {casa_aposta}")
         
         enviar_para_base44(casa_aposta, padrao_detectado, liga_detectada, resultado)
-
