@@ -1,0 +1,98 @@
+import logging
+import json
+import requests
+import re
+from datetime import datetime
+from telethon import TelegramClient, events
+
+# ==========================================
+# 1. CONFIGURAÇÃO DO RASTREIO (LOGS)
+# ==========================================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler("rastreio_base44.log", encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+# ==========================================
+# 2. CREDENCIAIS
+# ==========================================
+api_id = '36667927'
+api_hash = '7514985528ad7a0458d289549d0dc678'
+TOKEN_BASE44 = 'b44u_527ea4fab8b748efe22e59eb3596437bde1021dd515e3f5183d51d131c09fdb4'
+URL_BASE44 = 'https://ambrosial-ops-flow-dash.base44.app/api/entities/Operacoes'
+
+client = TelegramClient('sessao_telegram', api_id, api_hash)
+
+# ==========================================
+# 3. FUNÇÃO DE ENVIO COM RASTREIO
+# ==========================================
+def enviar_para_base44(casa_aposta, padrao, liga, resultado):
+    payload = {
+        "casa_de_aposta": casa_aposta,
+        "padrao": padrao,
+        "liga": liga,
+        "resultado": int(resultado),
+        "data_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {TOKEN_BASE44}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        resposta = requests.post(URL_BASE44, json=payload, headers=headers, timeout=10)
+        
+        if resposta.status_code in [200, 201]:
+            logging.info("✅ [SUCESSO] Operação comercial entregue à Base44!")
+        else:
+            logging.error(f"❌ [ERRO API] Código {resposta.status_code}. Retorno: {resposta.text}")
+            
+    except Exception as e:
+        logging.critical(f"💥 [FALHA CRÍTICA] Erro de rede ou servidor: {e}")
+
+# ==========================================
+# 4. ESCUTADOR DO TELEGRAM E EXTRAÇÃO (REGEX)
+# ==========================================
+@client.on(events.NewMessage)
+async def my_event_handler(event):
+    mensagem = event.message.message
+    
+    # Verifica se é um sinal de Green ou Red
+    resultado = None
+    if "GREEN" in mensagem.upper() or "✅" in mensagem:
+        resultado = 1
+    elif "RED" in mensagem.upper() or "❌" in mensagem:
+        resultado = -1
+        
+    # Se encontrou um resultado, extrai os dados e envia
+    if resultado is not None:
+        logging.info(f"📩 Sinal detectado no Telegram. Resultado: {'Green' if resultado == 1 else 'Red'}")
+        
+        # 1. Extrair o Padrão
+        padrao_match = re.search(r'Padrão:\s*(.+)', mensagem)
+        padrao_detectado = padrao_match.group(1).strip() if padrao_match else "Padrão Não Identificado"
+        
+        # 2. Extrair a Liga (Ignora o emoji do troféu automaticamente)
+        liga_match = re.search(r'Liga:\s*(.+)', mensagem)
+        liga_detectada = liga_match.group(1).strip() if liga_match else "Liga Não Identificada"
+        
+        # 3. Extrair a Casa de Aposta baseada no Link da mensagem
+        casa_aposta = "Desconhecida"
+        if "betano.bet.br" in mensagem.lower() or "vigia betano" in mensagem.lower():
+            casa_aposta = "Betano"
+        elif "bet365.com" in mensagem.lower() or "bet365.bet" in mensagem.lower():
+            casa_aposta = "Bet365"
+
+        logging.info(f"🔍 Dados Extraídos -> Padrão: {padrao_detectado} | Liga: {liga_detectada} | Casa: {casa_aposta}")
+        
+        # Envia os dados reais e limpos para a Base44
+        enviar_para_base44(casa_aposta, padrao_detectado, liga_detectada, resultado)
+
+with client:
+    logging.info("🚀 Escutador comercial ativado. A monitorar Telegram sem limites...")
+    client.run_until_disconnected()
