@@ -1,38 +1,116 @@
+import logging
+import json
+import requests
+import re
+import os
+from threading import Thread
+from flask import Flask
+from datetime import datetime
+from telethon import TelegramClient, events
+
+# ==========================================
+# 1. CONFIGURAÇÃO DOS LOGS
+# ==========================================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler("rastreio_base44.log", encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+# ==========================================
+# 2. MINI SERVIDOR WEB (EXIGÊNCIA DO RENDER)
+# ==========================================
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return "Bot Telegram Base44 ativo e a operar!", 200
+
+def run_flask():
+    porta = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=porta)
+
+# ==========================================
+# 3. CREDENCIAIS E LIGAÇÃO
+# ==========================================
+api_id = '36667927'
+api_hash = '7514985528ad7a0458d289549d0dc678'
+TOKEN_BASE44 = 'b44u_527ea4fab8b748efe22e59eb3596437bde1021dd515e3f5183d51d131c09fdb4'
+URL_BASE44 = 'https://ambrosial-ops-flow-dash.base44.app/api/entities/Operacoes'
+
+client = TelegramClient('sessao_telegram', api_id, api_hash)
+
+# ==========================================
+# 4. FUNÇÃO DE ENVIO PARA A BASE44
+# ==========================================
+def enviar_para_base44(casa_aposta, padrao, liga, resultado):
+    payload = {
+        "casa_de_aposta": casa_aposta,
+        "padrao": padrao,
+        "liga": liga,
+        "resultado": int(resultado),
+        "data_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {TOKEN_BASE44}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        resposta = requests.post(URL_BASE44, json=payload, headers=headers, timeout=10)
+        if resposta.status_code in [200, 201]:
+            logging.info("✅ [SUCESSO] Operação comercial entregue à Base44!")
+        else:
+            logging.error(f"❌ [ERRO API] Código {resposta.status_code}. Retorno: {resposta.text}")
+    except Exception as e:
+        logging.critical(f"💥 [FALHA CRÍTICA] Erro de rede ou servidor: {e}")
+
+# ==========================================
+# 5. ESCUTADOR COM A LÓGICA ORIGINAL DIRETA
+# ==========================================
 @client.on(events.NewMessage)
 async def my_event_handler(event):
     mensagem = event.message.message
     
     resultado = None
-    msg_upper = mensagem.upper()
-    if any(termo in msg_upper for termo in ["GREEN", "✅", "WIN", "VITÓRIA", "ITORIA"]):
+    if "GREEN" in mensagem.upper() or "✅" in mensagem:
         resultado = 1
-    elif any(termo in msg_upper for termo in ["RED", "❌", "LOSS", "DERROTA", "ERRO"]):
+    elif "RED" in mensagem.upper() or "❌" in mensagem:
         resultado = -1
         
     if resultado is not None:
-        logging.info(f"📩 Sinal detectado! Texto:\n{mensagem}")
+        logging.info(f"📩 Sinal detectado no Telegram. Resultado: {'Green' if resultado == 1 else 'Red'}")
         
-        # Procura por Padrão, Entrada ou qualquer linha descritiva
-        padrao_match = re.search(r'(?:padr[ãa]o|padrao|entrada|estrat[ée]gia)[:\*\s]*([^\n]+)', mensagem, re.IGNORECASE)
-        if padrao_match:
-            padrao_detectado = padrao_match.group(1).replace('*', '').strip()
-        else:
-            # Se não achar a palavra exata, pega a primeira linha útil da mensagem
-            linhas = [l.strip() for l in mensagem.split('\n') if l.strip()]
-            padrao_detectado = linhas[0] if linhas else "Padrão Automático"
+        # Lógica direta do primeiro script com tolerância a maiúsculas/minúsculas
+        padrao_match = re.search(r'Padrão:\s*(.+)', mensagem, re.IGNORECASE)
+        padrao_detectado = padrao_match.group(1).strip() if padrao_match else "Padrão Não Identificado"
         
-        # Captura flexível para a Liga
-        liga_match = re.search(r'(?:liga)[:\*\s]*([^\n]+)', mensagem, re.IGNORECASE)
-        liga_detectada = liga_match.group(1).replace('*', '').strip() if liga_match else "Liga Geral"
+        liga_match = re.search(r'Liga:\s*(.+)', mensagem, re.IGNORECASE)
+        liga_detectada = liga_match.group(1).strip() if liga_match else "Liga Não Identificada"
         
-        # Identificação da Casa de Aposta
-        casa_aposta = "Betano" # Valor padrão caso o canal seja focado numa casa específica, ou detetado pelo texto:
-        msg_lower = mensagem.lower()
-        if "bet365" in msg_lower:
-            casa_aposta = "Bet365"
-        elif "betano" in msg_lower:
+        casa_aposta = "Desconhecida"
+        if "betano" in mensagem.lower():
             casa_aposta = "Betano"
+        elif "bet365" in mensagem.lower():
+            casa_aposta = "Bet365"
 
         logging.info(f"🔍 Dados Extraídos -> Padrão: {padrao_detectado} | Liga: {liga_detectada} | Casa: {casa_aposta}")
         
         enviar_para_base44(casa_aposta, padrao_detectado, liga_detectada, resultado)
+
+# ==========================================
+# 6. ARRANQUE EM PARALELO (WEB + TELEGRAM)
+# ==========================================
+if __name__ == '__main__':
+    t = Thread(target=run_flask)
+    t.daemon = True
+    t.start()
+
+    logging.info("🚀 Servidor Web e Escutador ativados em paralelo...")
+    with client:
+        client.run_until_disconnected()
+
