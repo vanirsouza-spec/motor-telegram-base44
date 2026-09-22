@@ -71,36 +71,44 @@ def enviar_para_base44(casa_aposta, padrao, liga, resultado):
 
 # ==========================================
 # 5. ESCUTADOR COM A LÓGICA ORIGINAL DIRETA
-# ==========================================
+# =========≈================================
 @client.on(events.NewMessage)
 async def my_event_handler(event):
     mensagem = event.message.message
     
     resultado = None
-    if "GREEN" in mensagem.upper() or "✅" in mensagem:
+    msg_upper = mensagem.upper()
+    if any(termo in msg_upper for termo in ["GREEN", "✅", "WIN", "VITÓRIA", "ITORIA"]):
         resultado = 1
-    elif "RED" in mensagem.upper() or "❌" in mensagem:
+    elif any(termo in msg_upper for termo in ["RED", "❌", "LOSS", "DERROTA", "ERRO"]):
         resultado = -1
         
     if resultado is not None:
         logging.info(f"📩 Sinal detectado no Telegram. Resultado: {'Green' if resultado == 1 else 'Red'}")
         
-        # Lógica direta do primeiro script com tolerância a maiúsculas/minúsculas
-        padrao_match = re.search(r'Padrão:\s*(.+)', mensagem, re.IGNORECASE)
-        padrao_detectado = padrao_match.group(1).strip() if padrao_match else "Padrão Não Identificado"
+        # Captura o texto do padrão de forma abrangente
+        padrao_match = re.search(r'(?:padr[ãa]o|padrao)[:\*\s]*([^\n]+)', mensagem, re.IGNORECASE)
+        if padrao_match:
+            padrao_detectado = padrao_match.group(1).replace('*', '').strip()
+        else:
+            # Se a palavra padrão não vier explícita, pega a primeira linha informativa da mensagem
+            linhas = [l.strip() for l in mensagem.split('\n') if l.strip()]
+            padrao_detectado = linhas[0] if linhas else mensagem[:50].strip()
         
-        liga_match = re.search(r'Liga:\s*(.+)', mensagem, re.IGNORECASE)
-        liga_detectada = liga_match.group(1).strip() if liga_match else "Liga Não Identificada"
+        # Como a sigla da liga já faz parte do padrão, definimos a liga de forma unificada
+        liga_detectada = "Integrado no Padrão"
         
         casa_aposta = "Desconhecida"
-        if "betano" in mensagem.lower():
+        msg_lower = mensagem.lower()
+        if any(termo in msg_lower for termo in ["betano", "betano.bet.br", "vigia betano"]):
             casa_aposta = "Betano"
-        elif "bet365" in mensagem.lower():
+        elif any(termo in msg_lower for termo in ["bet365", "bet365.com", "bet365.bet"]):
             casa_aposta = "Bet365"
 
         logging.info(f"🔍 Dados Extraídos -> Padrão: {padrao_detectado} | Liga: {liga_detectada} | Casa: {casa_aposta}")
         
         enviar_para_base44(casa_aposta, padrao_detectado, liga_detectada, resultado)
+
 
 # ==========================================
 # 6. ARRANQUE EM PARALELO (WEB + TELEGRAM)
